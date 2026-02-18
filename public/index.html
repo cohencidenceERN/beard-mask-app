@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Beard Mask — Custom Fit Scanner</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --black: #0a0a0a;
+            --white: #f5f5f0;
+            --gold: #c9a84c;
+            --gold-light: #e8cc7a;
+            --dark: #141414;
+            --mid: #1e1e1e;
+            --line: rgba(201,168,76,0.25);
+            --green: #22c55e;
+            --red: #ef4444;
+            --blue: #3b82f6;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'DM Sans', sans-serif; background: var(--black); color: var(--white); min-height: 100vh; overflow-x: hidden; }
+        h1,h2,h3,h4 { font-family: 'Syne', sans-serif; }
+        .app { max-width: 1100px; margin: 0 auto; padding: 20px; }
+
+        /* Header */
+        .header { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--line); margin-bottom: 30px; }
+        .logo { font-family: 'Syne', sans-serif; font-size: 1.4rem; font-weight: 800; letter-spacing: .05em; color: var(--gold); }
+        .logo span { color: var(--white); }
+        .step-pills { display: flex; gap: 8px; }
+        .pill { width: 32px; height: 6px; border-radius: 3px; background: var(--mid); transition: background .3s; }
+        .pill.active { background: var(--gold); }
+        .pill.done { background: var(--gold-light); opacity: .5; }
+
+        /* Camera */
+        .camera-section { max-width: 560px; margin: 0 auto; }
+        .camera-wrap { position: relative; background: #000; border-radius: 16px; overflow: hidden; border: 1px solid var(--line); }
+        .camera-wrap video { width: 100%; display: block; transform: scaleX(-1); }
+        .camera-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+        .instruction-bar { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); background: rgba(10,10,10,.88); border: 1px solid var(--gold); color: var(--gold); padding: 8px 20px; border-radius: 30px; font-family: 'Syne', sans-serif; font-size: .85rem; font-weight: 600; letter-spacing: .04em; white-space: nowrap; z-index: 10; text-align: center; max-width: 90%; }
+        .face-status { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); font-size: .75rem; font-family: 'Syne', sans-serif; padding: 4px 12px; border-radius: 20px; z-index: 10; transition: all .3s; }
+        .face-status.found { background: rgba(34,197,94,.2); color: var(--green); border: 1px solid var(--green); }
+        .face-status.searching { background: rgba(239,68,68,.2); color: var(--red); border: 1px solid var(--red); }
+        .capture-btn { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: 68px; height: 68px; border-radius: 50%; border: 3px solid var(--gold); display: flex; align-items: center; justify-content: center; cursor: pointer; background: transparent; z-index: 10; transition: transform .2s; }
+        .capture-btn:active { transform: translateX(-50%) scale(.93); }
+        .capture-inner { width: 52px; height: 52px; border-radius: 50%; background: var(--gold); transition: background .2s; }
+        .capture-btn.disabled .capture-inner { background: #444; }
+
+        /* Thumbnails */
+        .angle-strip { display: flex; gap: 10px; justify-content: center; margin: 18px 0; flex-wrap: wrap; }
+        .angle-thumb { width: 64px; height: 64px; border-radius: 10px; border: 2px solid var(--mid); overflow: hidden; background: var(--dark); display: flex; align-items: center; justify-content: center; position: relative; flex-shrink: 0; transition: border-color .3s; }
+        .angle-thumb.done { border-color: var(--gold); }
+        .angle-thumb.current { border-color: var(--gold-light); box-shadow: 0 0 0 2px var(--gold-light); }
+        .angle-thumb img { width: 100%; height: 100%; object-fit: cover; }
+        .angle-thumb-lbl { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,.75); font-size: .55rem; text-align: center; padding: 2px; font-family: 'Syne', sans-serif; }
+        .angle-num { font-family: 'Syne', sans-serif; font-size: 1.4rem; font-weight: 800; color: #333; }
+
+        /* Customize grid */
+        .customize-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
+        .photo-editor { background: var(--dark); border-radius: 14px; overflow: hidden; border: 1px solid var(--line); }
+        .editor-header { padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--line); }
+        .editor-label { font-family: 'Syne', sans-serif; font-size: .78rem; font-weight: 700; letter-spacing: .1em; color: var(--gold); text-transform: uppercase; }
+        .ai-badge { font-size: .68rem; padding: 3px 8px; border-radius: 20px; font-weight: 600; }
+        .ai-badge.done { background: var(--gold); color: var(--black); }
+        .ai-badge.processing { background: transparent; color: var(--gold); border: 1px solid var(--gold); animation: pulse 1s infinite; }
+        .ai-badge.idle { background: transparent; color: #444; border: 1px solid #333; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+        .canvas-wrap { position: relative; width: 100%; overflow: hidden; touch-action: none; cursor: crosshair; }
+        .canvas-wrap img { width: 100%; display: block; pointer-events: none; user-select: none; }
+        .canvas-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+        .drag-hint { position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.8); color: var(--gold); font-size: .62rem; padding: 3px 9px; border-radius: 8px; font-family: 'Syne', sans-serif; pointer-events: none; white-space: nowrap; z-index: 5; }
+
+        .legend { display: flex; gap: 10px; padding: 8px 12px; background: #0d0d0d; flex-wrap: wrap; }
+        .legend-item { display: flex; align-items: center; gap: 5px; font-size: .68rem; font-family: 'Syne', sans-serif; color: #888; }
+        .legend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+
+        /* Buttons */
+        .actions { display: flex; gap: 12px; margin-top: 20px; }
+        .btn-primary { flex: 1; background: var(--gold); color: var(--black); border: none; padding: 15px 24px; border-radius: 12px; font-family: 'Syne', sans-serif; font-size: 1rem; font-weight: 700; cursor: pointer; transition: all .2s; }
+        .btn-primary:hover { background: var(--gold-light); }
+        .btn-primary:disabled { background: #2a2a2a; color: #555; cursor: not-allowed; }
+        .btn-ghost { background: transparent; color: var(--white); border: 1px solid var(--line); padding: 15px 20px; border-radius: 12px; font-family: 'Syne', sans-serif; font-size: .9rem; font-weight: 600; cursor: pointer; transition: all .2s; white-space: nowrap; }
+        .btn-ghost:hover { border-color: var(--gold); color: var(--gold); }
+
+        /* Checkout */
+        .checkout-box { background: var(--dark); border: 1px solid var(--line); border-radius: 18px; padding: 32px; max-width: 480px; margin: 0 auto; }
+        .input-label { font-family: 'Syne', sans-serif; font-size: .7rem; letter-spacing: .1em; text-transform: uppercase; color: #666; }
+        .input-field { width: 100%; background: var(--mid); border: 1px solid #2a2a2a; color: var(--white); padding: 13px 15px; border-radius: 10px; font-size: 1rem; font-family: 'DM Sans', sans-serif; margin: 7px 0 14px; transition: border-color .2s; }
+        .input-field:focus { outline: none; border-color: var(--gold); }
+        .price-tag { font-family: 'Syne', sans-serif; font-size: 2.8rem; font-weight: 800; color: var(--gold); text-align: center; margin: 24px 0; }
+        .price-tag span { font-size: 1.4rem; color: #444; }
+
+        /* Processing */
+        .processing-wrap { text-align: center; padding: 80px 20px; }
+        .spinner { width: 70px; height: 70px; border: 4px solid #1a1a1a; border-top-color: var(--gold); border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto 28px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .progress-track { width: 100%; max-width: 380px; height: 4px; background: var(--mid); border-radius: 2px; margin: 18px auto; overflow: hidden; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, var(--gold), var(--gold-light)); transition: width .3s; }
+
+        /* Confirm */
+        .confirm-wrap { text-align: center; padding: 50px 20px; max-width: 480px; margin: 0 auto; }
+        .confirm-icon { width: 72px; height: 72px; border-radius: 50%; background: var(--gold); display: flex; align-items: center; justify-content: center; font-size: 1.8rem; margin: 0 auto 24px; }
+        .order-card { background: var(--dark); border: 1px solid var(--line); border-radius: 14px; padding: 20px; margin: 20px 0; text-align: left; }
+        .order-row { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: .88rem; }
+        .order-row:last-child { border-bottom: none; }
+        .order-row-label { color: #555; }
+        .order-row-val { color: var(--gold); font-weight: 600; }
+        .next-steps { background: var(--mid); border-radius: 12px; padding: 18px; text-align: left; margin-top: 18px; }
+        .next-steps h4 { font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: var(--gold); margin-bottom: 12px; }
+        .next-step-item { display: flex; gap: 10px; margin: 9px 0; font-size: .88rem; color: #999; }
+        .step-num { width: 20px; height: 20px; border-radius: 50%; background: var(--gold); color: var(--black); display: flex; align-items: center; justify-content: center; font-size: .65rem; font-weight: 700; flex-shrink: 0; margin-top: 2px; }
+
+        .hidden { display: none; }
+        @media(max-width: 660px) { .customize-grid { grid-template-columns: 1fr; } .header { flex-direction: column; gap: 12px; } }
+    </style>
+</head>
+<body>
+<div class="app" id="root">
+    <!-- Rendered by JS below -->
+</div>
+
+<script>
+// ─── Config ────────────────────────────────────────────────────────────────────
+const ANGLES = [
+    { id: 'front',  label: 'Front',         instruction: 'Fill the oval — face forward, chin level' },
+    { id: 'left',   label: 'Left Profile',  instruction: 'Turn 90° right — keep ear fully visible' },
+    { id: 'right',  label: 'Right Profile', instruction: 'Turn 90° left  — keep ear fully visible' },
+    { id: 'chinUp', label: 'Chin Up',       instruction: "Tilt head back — show full neck" }
+];
+
+// Landmark-based line calculation using MediaPipe face detection
+// Anchors lines to actual facial features (earlobe, chin, vermillion junction)
+// Based on reference beard measurements
+
+function calculateLandmarkLines(landmarks, angleId) {
+    // Fallback to hardcoded if no landmarks
+    if (!landmarks || landmarks.length < 468) {
+        return getDefaultLines(angleId);
+    }
+    
+    // Key facial landmarks
+    const faceTop    = landmarks[10];   // Forehead top
+    const chin       = landmarks[152];  // Chin bottom
+    const leftCheek  = landmarks[234];  // Left ear area
+    const rightCheek = landmarks[454];  // Right ear area
+    const vermillion = landmarks[18];   // Vermillion junction (center upper lip)
+    const leftSide   = landmarks[127];  // Left sideburn
+    
+    // Face dimensions
+    const faceHeight = Math.abs(chin.y - faceTop.y);
+    const faceWidth  = Math.abs(rightCheek.x - leftCheek.x);
+    const centerX    = (leftCheek.x + rightCheek.x) / 2;
+    const toPercent  = (v) => v * 100;
+    
+    if (angleId === 'front') {
+        // Front view: cheek lines using landmarks 137→214 (right) mirrored to 366→434 (left)
+        // Right cheek curve
+        const rightStart = landmarks[137];  // Right sideburn area
+        const rightEnd   = landmarks[214];  // Near right mustache
+        const rightMid   = landmarks[177];  // Midpoint of right cheek curve
+        
+        // Left cheek curve (mirror)
+        const leftStart = landmarks[366];   // Left sideburn area  
+        const leftEnd   = landmarks[434];   // Near left mustache
+        const leftMid   = landmarks[401];   // Midpoint of left cheek curve
+        
+        return {
+            cheekR: {
+                x1: toPercent(rightStart.x),
+                y1: toPercent(rightStart.y),
+                cx: toPercent(rightMid.x),
+                cy: toPercent(rightMid.y),
+                x2: toPercent(rightEnd.x),
+                y2: toPercent(rightEnd.y)
+            },
+            cheekL: {
+                x1: toPercent(leftStart.x),
+                y1: toPercent(leftStart.y),
+                cx: toPercent(leftMid.x),
+                cy: toPercent(leftMid.y),
+                x2: toPercent(leftEnd.x),
+                y2: toPercent(leftEnd.y)
+            }
+        };
+    }
+    
+    if (angleId === 'left') {
+        // Left profile: ear line starts at landmark 93, angles BEHIND the ear (not perpendicular)
+        const earTop = landmarks[93];  // Top of ear line (detected)
+        const vermillion = landmarks[18];  // Vermillion junction (center upper lip)
+        
+        // Ear line: from landmark 93, extends BACKWARD + DOWN (angles behind ear)
+        // Based on reference photo: goes ~15% backward, ~22% downward
+        const earStartX = toPercent(earTop.x);
+        const earStartY = toPercent(earTop.y);
+        const earEndX   = earStartX - (faceWidth * 100 * 0.15);  // BACKWARD (toward back of head)
+        const earEndY   = earStartY + (faceHeight * 100 * 0.22); // DOWNWARD
+        
+        // Cheek line: sweeps from ear area toward face center
+        const cheekCX = (earStartX + 70) / 2;  // Midpoint toward center
+        const cheekCY = earStartY + (faceHeight * 100 * 0.15);
+        
+        // Neck line: sits at vermillion + 65% of face height (LOW near collar)
+        // This is the key measurement from your photos: lip to neck midpoint
+        const neckY  = toPercent(vermillion.y + faceHeight * 0.65);
+        const neckCY = neckY - (faceHeight * 100 * 0.08);  // Curves up slightly in middle
+        
+        return {
+            ear: {
+                x1: earStartX,
+                y1: earStartY,
+                x2: earEndX,
+                y2: earEndY
+            },
+            cheek: {
+                x1: earStartX,
+                y1: earStartY,
+                cx: cheekCX,
+                cy: cheekCY,
+                x2: 75,
+                y2: earStartY + (faceHeight * 100 * 0.18)
+            },
+            neck: {
+                x1: 5,
+                y1: neckY,
+                cx: 50,
+                cy: neckCY,
+                x2: 95,
+                y2: neckY
+            }
+        };
+    }
+    
+    if (angleId === 'right') {
+        // Right profile: mirror of left, using landmark 323
+        const earTop = landmarks[323];  // Top of ear line (right side)
+        const vermillion = landmarks[18];  // Vermillion junction (center upper lip)
+        
+        // Ear line: angles BEHIND the ear (same as left, but mirrored)
+        const earStartX = toPercent(earTop.x);
+        const earStartY = toPercent(earTop.y);
+        const earEndX   = earStartX + (faceWidth * 100 * 0.15);  // BACKWARD (mirrored - goes rightward in image)
+        const earEndY   = earStartY + (faceHeight * 100 * 0.22); // DOWNWARD
+        
+        const cheekCX = (earStartX + 30) / 2;
+        const cheekCY = earStartY + (faceHeight * 100 * 0.15);
+        
+        const neckY  = toPercent(vermillion.y + faceHeight * 0.65);
+        const neckCY = neckY - (faceHeight * 100 * 0.08);
+        
+        return {
+            ear: {
+                x1: earStartX,
+                y1: earStartY,
+                x2: earEndX,
+                y2: earEndY
+            },
+            cheek: {
+                x1: earStartX,
+                y1: earStartY,
+                cx: cheekCX,
+                cy: cheekCY,
+                x2: 25,
+                y2: earStartY + (faceHeight * 100 * 0.18)
+            },
+            neck: {
+                x1: 5,
+                y1: neckY,
+                cx: 50,
+                cy: neckCY,
+                x2: 95,
+                y2: neckY
+            }
+        };
+    }
+    
+    if (angleId === 'chinUp') {
+        // Chin up view: neck line only
+        const neckY  = toPercent(chin.y + faceHeight * 0.35);
+        const neckCY = neckY - (faceHeight * 100 * 0.06);
+        
+        return {
+            neck: {
+                x1: 10,
+                y1: neckY,
+                cx: 50,
+                cy: neckCY,
+                x2: 90,
+                y2: neckY
+            }
+        };
+    }
+}
+
+// Hardcoded fallback if no face detected
+function getDefaultLines(angleId) {
+    if (angleId === 'front') return {
+        cheekL: { x1: 20, y1: 45, cx: 28, cy: 60, x2: 44, y2: 65 },
+        cheekR: { x1: 80, y1: 45, cx: 72, cy: 60, x2: 56, y2: 65 }
+    };
+    if (angleId === 'left') return {
+        ear:   { x1: 26, y1: 46, x2: 20, y2: 64 },
+        cheek: { x1: 26, y1: 46, cx: 52, cy: 58, x2: 80, y2: 63 },
+        neck:  { x1: 5,  y1: 83, cx: 48, cy: 77, x2: 92, y2: 83 }
+    };
+    if (angleId === 'right') return {
+        ear:   { x1: 74, y1: 46, x2: 80, y2: 64 },
+        cheek: { x1: 74, y1: 46, cx: 48, cy: 58, x2: 20, y2: 63 },
+        neck:  { x1: 5,  y1: 83, cx: 52, cy: 77, x2: 92, y2: 83 }
+    };
+    if (angleId === 'chinUp') return {
+        neck: { x1: 8, y1: 70, cx: 50, cy: 64, x2: 92, y2: 70 }
+    };
+}
+
+// ─── State ─────────────────────────────────────────────────────────────────────
+let state = {
+    step: 1,
+    currentAngle: 0,
+    photos: { front: null, left: null, right: null, chinUp: null },
+    lines: {
+        front:  getDefaultLines('front'),
+        left:   getDefaultLines('left'),
+        right:  getDefaultLines('right'),
+        chinUp: getDefaultLines('chinUp')
+    },
+    aiResults:  { front: null, left: null, right: null, chinUp: null },
+    generating: { front: false, left: false, right: false, chinUp: false },
+    faceDetected: false,
+    processing: 0,
+    orderId: null,
+    customerInfo: { name: '', email: '', phone: '' }
+};
+
+function setState(patch) {
+    Object.assign(state, patch);
+    render();
+}
+
+// ─── Drawing ───────────────────────────────────────────────────────────────────
+function drawHandle(ctx, x, y, color, size = 11) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, size, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 2;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 10;
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+}
+
+function drawCurve(ctx, x1p, y1p, cxp, cyp, x2p, y2p, W, H, color, label) {
+    const x1 = W*x1p/100, y1 = H*y1p/100;
+    const cx = W*cxp/100, cy = H*cyp/100;
+    const x2 = W*x2p/100, y2 = H*y2p/100;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.quadraticCurveTo(cx, cy, x2, y2);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([9, 6]);
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 8;
+    ctx.stroke();
+    ctx.restore();
+    // Endpoint handles (small)
+    drawHandle(ctx, x1, y1, 'rgba(255,255,255,0.8)', 6);
+    drawHandle(ctx, x2, y2, 'rgba(255,255,255,0.8)', 6);
+    // Control point handle (large, draggable)
+    drawHandle(ctx, cx, cy, color, 12);
+    // Label
+    drawLineLabel(ctx, x1, y1 - 10, label, color, W);
+}
+
+function drawStraight(ctx, x1p, y1p, x2p, y2p, W, H, color, label) {
+    const x1 = W*x1p/100, y1 = H*y1p/100;
+    const x2 = W*x2p/100, y2 = H*y2p/100;
+    const mx = (x1+x2)/2, my = (y1+y2)/2;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([9, 6]);
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 8;
+    ctx.stroke();
+    ctx.restore();
+    drawHandle(ctx, x1, y1, 'rgba(255,255,255,0.8)', 6);
+    drawHandle(ctx, x2, y2, 'rgba(255,255,255,0.8)', 6);
+    drawHandle(ctx, mx, my, color, 12);
+    drawLineLabel(ctx, x1 + 6, y1 - 8, label, color, W);
+}
+
+function drawLineLabel(ctx, x, y, text, color, W) {
+    ctx.save();
+    const fs = Math.max(10, W * 0.02);
+    ctx.font = `700 ${fs}px Syne, sans-serif`;
+    const tw = ctx.measureText(text).width;
+    ctx.fillStyle = 'rgba(0,0,0,0.72)';
+    ctx.fillRect(x - 2, y - fs, tw + 4, fs + 5);
+    ctx.fillStyle = color;
+    ctx.fillText(text, x, y);
+    ctx.restore();
+}
+
+function paintLines(canvas, imgSrc, lines, angleId) {
+    if (!canvas || !imgSrc) return;
+    const img = new Image();
+    img.onload = () => {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        const W = img.width, H = img.height;
+        ctx.clearRect(0, 0, W, H);
+
+        if (angleId === 'front') {
+            const cl = lines.cheekL, cr = lines.cheekR;
+            drawCurve(ctx, cl.x1, cl.y1, cl.cx, cl.cy, cl.x2, cl.y2, W, H, '#3b82f6', 'Cheek');
+            drawCurve(ctx, cr.x1, cr.y1, cr.cx, cr.cy, cr.x2, cr.y2, W, H, '#3b82f6', '');
+        }
+        if (angleId === 'left' || angleId === 'right') {
+            drawStraight(ctx, lines.ear.x1, lines.ear.y1, lines.ear.x2, lines.ear.y2, W, H, '#ef4444', 'Ear');
+            drawCurve(ctx, lines.cheek.x1, lines.cheek.y1, lines.cheek.cx, lines.cheek.cy, lines.cheek.x2, lines.cheek.y2, W, H, '#3b82f6', 'Cheek');
+            drawCurve(ctx, lines.neck.x1, lines.neck.y1, lines.neck.cx, lines.neck.cy, lines.neck.x2, lines.neck.y2, W, H, '#22c55e', 'Neck');
+        }
+        if (angleId === 'chinUp') {
+            drawCurve(ctx, lines.neck.x1, lines.neck.y1, lines.neck.cx, lines.neck.cy, lines.neck.x2, lines.neck.y2, W, H, '#22c55e', 'Neck');
+        }
+    };
+    img.src = imgSrc;
+}
+
+// ─── Hit Testing ───────────────────────────────────────────────────────────────
+function hitTest(px, py, lines, angleId, W, H) {
+    const R = 20;
+    const d = (ax, ay) => Math.sqrt((px - W*ax/100)**2 + (py - H*ay/100)**2);
+
+    if (angleId === 'front') {
+        if (d(lines.cheekL.cx, lines.cheekL.cy) < R) return 'cheekL';
+        if (d(lines.cheekR.cx, lines.cheekR.cy) < R) return 'cheekR';
+    }
+    if (angleId === 'left' || angleId === 'right') {
+        const eMx = (lines.ear.x1 + lines.ear.x2)/2;
+        const eMy = (lines.ear.y1 + lines.ear.y2)/2;
+        if (d(eMx, eMy) < R) return 'ear';
+        if (d(lines.cheek.cx, lines.cheek.cy) < R) return 'cheek';
+        if (d(lines.neck.cx, lines.neck.cy) < R) return 'neck';
+    }
+    if (angleId === 'chinUp') {
+        if (d(lines.neck.cx, lines.neck.cy) < R) return 'neck';
+    }
+    return null;
+}
+
+// ─── AI Generation ─────────────────────────────────────────────────────────────
+const debounceTimers = {};
+
+function triggerAI(angleId) {
+    if (debounceTimers[angleId]) clearTimeout(debounceTimers[angleId]);
+    debounceTimers[angleId] = setTimeout(() => runAI(angleId), 2000);
+}
+
+async function runAI(angleId) {
+    const photo = state.photos[angleId];
+    if (!photo) return;
+
+    const img = new Image();
+    await new Promise(r => { img.onload = r; img.src = photo; });
+    const W = img.width, H = img.height;
+    const lines = state.lines[angleId];
+
+    // Build mask
+    const mc = document.createElement('canvas');
+    mc.width = W; mc.height = H;
+    const mctx = mc.getContext('2d');
+    mctx.fillStyle = 'black'; mctx.fillRect(0, 0, W, H);
+    mctx.fillStyle = 'white';
+
+    if (angleId === 'front') {
+        const cl = lines.cheekL, cr = lines.cheekR;
+        mctx.beginPath();
+        mctx.moveTo(W*cl.x1/100, H*cl.y1/100);
+        mctx.quadraticCurveTo(W*cl.cx/100, H*cl.cy/100, W*cl.x2/100, H*cl.y2/100);
+        mctx.lineTo(W*cr.x2/100, H*cr.y2/100);
+        mctx.quadraticCurveTo(W*cr.cx/100, H*cr.cy/100, W*cr.x1/100, H*cr.y1/100);
+        mctx.closePath(); mctx.fill();
+    } else if (angleId === 'left' || angleId === 'right') {
+        const cheekY = H * lines.cheek.cy / 100;
+        const neckY  = H * lines.neck.cy  / 100;
+        mctx.fillRect(0, cheekY, W, neckY - cheekY);
+    } else if (angleId === 'chinUp') {
+        const ny = H * lines.neck.cy / 100;
+        mctx.fillRect(W * 0.1, ny - H * 0.12, W * 0.8, H * 0.24);
+    }
+
+    const mask = mc.toDataURL('image/png');
+    const prompts = {
+        front:  'professional beard trim, clean symmetrical cheek lines, defined natural beard boundary, barbershop quality, photorealistic portrait',
+        left:   'professional beard trim side profile, defined ear line, natural cheek line, full low neckline near collar, barbershop quality, photorealistic',
+        right:  'professional beard trim side profile, defined ear line, natural cheek line, full low neckline near collar, barbershop quality, photorealistic',
+        chinUp: 'professional beard trim, clean low neckline near collar, full beard, natural skin, barbershop quality, photorealistic'
+    };
+
+    state.generating[angleId] = true;
+    render();
+
+    try {
+        // Create prediction via our server proxy
+        const r1 = await fetch('/api/predict', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                input: {
+                    image: photo,
+                    mask,
+                    prompt: prompts[angleId],
+                    negative_prompt: 'patchy, uneven, messy, asymmetrical, blurry, artifacts, fake looking',
+                    num_inference_steps: 20,
+                    guidance_scale: 7.5,
+                    strength: 0.75
+                }
+            })
+        });
+        const pred = await r1.json();
+        if (pred.error) throw new Error(pred.error);
+
+        // Poll
+        let result = pred, tries = 0;
+        while (result.status !== 'succeeded' && result.status !== 'failed' && tries < 60) {
+            await new Promise(r => setTimeout(r, 1500));
+            const r2 = await fetch(`/api/predict/${pred.id}`);
+            result = await r2.json();
+            tries++;
+        }
+        if (result.status === 'succeeded') {
+            state.aiResults[angleId] = Array.isArray(result.output) ? result.output[0] : result.output;
+        }
+    } catch (e) {
+        console.error('AI error:', e.message);
+    } finally {
+        state.generating[angleId] = false;
+        render();
+    }
+}
+
+// ─── Camera + Face Detection ───────────────────────────────────────────────────
+let mediaStream = null;
+let faceMesh = null;
+let cameraUtil = null;
+
+async function startCamera() {
+    const video = document.getElementById('camera-video');
+    const overlay = document.getElementById('camera-overlay');
+    if (!video) return;
+
+    try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 960 } }
+        });
+        video.srcObject = mediaStream;
+        await video.play();
+
+        // Set up MediaPipe Face Mesh
+        faceMesh = new FaceMesh({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}` });
+        faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+
+        faceMesh.onResults(results => {
+            const detected = results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0;
+            if (state.faceDetected !== detected) {
+                state.faceDetected = detected;
+                updateFaceStatus(detected);
+            }
+            
+            // Calculate landmark-based lines when face is detected
+            if (detected) {
+                const landmarks = results.multiFaceLandmarks[0];
+                const angleId = ANGLES[state.currentAngle].id;
+                
+                // Only calculate once per angle (unless user manually resets)
+                if (!state.lines[angleId]._landmarkCalculated) {
+                    const calculatedLines = calculateLandmarkLines(landmarks, angleId);
+                    if (calculatedLines) {
+                        state.lines[angleId] = { ...calculatedLines, _landmarkCalculated: true };
+                    }
+                }
+            }
+            
+            if (overlay && detected) drawFaceGuide(overlay, video, results.multiFaceLandmarks[0]);
+            else if (overlay) drawDefaultGuide(overlay, video);
+        });
+
+        // Run face mesh on frames
+        const runDetection = async () => {
+            if (!mediaStream || !video.videoWidth) { requestAnimationFrame(runDetection); return; }
+            await faceMesh.send({ image: video });
+            requestAnimationFrame(runDetection);
+        };
+        runDetection();
+
+    } catch (e) {
+        console.error('Camera error:', e);
+        document.getElementById('face-status').textContent = '⚠ Camera denied';
+    }
+}
+
+function stopCamera() {
+    if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+}
+
+function updateFaceStatus(detected) {
+    const el = document.getElementById('face-status');
+    if (!el) return;
+    el.textContent = detected ? '✓ Face detected — tap to capture' : '⟳ Looking for face...';
+    el.className = 'face-status ' + (detected ? 'found' : 'searching');
+}
+
+function drawFaceGuide(canvas, video, landmarks) {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    // Draw face outline from landmarks
+    const faceOutline = [10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109];
+    ctx.save();
+    ctx.beginPath();
+    faceOutline.forEach((idx, i) => {
+        const lm = landmarks[idx];
+        const x = (1 - lm.x) * W; // mirror
+        const y = lm.y * H;
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.closePath();
+    ctx.strokeStyle = '#c9a84c';
+    ctx.lineWidth = 2;
+    ctx.shadowColor = '#c9a84c';
+    ctx.shadowBlur = 8;
+    ctx.stroke();
+    ctx.restore();
+
+    // Fill guide
+    ctx.save();
+    const region = new Path2D();
+    faceOutline.forEach((idx, i) => {
+        const lm = landmarks[idx];
+        const x = (1 - lm.x) * W;
+        const y = lm.y * H;
+        i === 0 ? region.moveTo(x, y) : region.lineTo(x, y);
+    });
+    region.closePath();
+
+    // Darken outside face
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fill(region);
+    ctx.restore();
+}
+
+function drawDefaultGuide(canvas, video) {
+    if (!video.videoWidth) return;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    const cx = W / 2, cy = H * 0.46, rx = W * 0.28, ry = H * 0.42;
+
+    // Darken outside oval
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Gold oval border
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.strokeStyle = '#c9a84c';
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([12, 7]);
+    ctx.shadowColor = '#c9a84c';
+    ctx.shadowBlur = 8;
+    ctx.stroke();
+    ctx.restore();
+}
+
+function capturePhoto() {
+    const video = document.getElementById('camera-video');
+    if (!video) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(video, 0, 0);
+    const data = canvas.toDataURL('image/jpeg', 0.92);
+    const id = ANGLES[state.currentAngle].id;
+    state.photos[id] = data;
+
+    if (state.currentAngle < ANGLES.length - 1) {
+        state.currentAngle++;
+        setState({});
+    } else {
+        stopCamera();
+        setState({ step: 2 });
+    }
+}
+
+// ─── Drag Logic for Photo Editors ─────────────────────────────────────────────
+let dragState = { angleId: null, key: null };
+
+function onEditorPointerDown(e, angleId) {
+    const wrap = e.currentTarget;
+    const canvas = wrap.querySelector('canvas');
+    if (!canvas) return;
+    const rect = wrap.getBoundingClientRect();
+    const px = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const py = (e.clientY - rect.top)  * (canvas.height / rect.height);
+    const key = hitTest(px, py, state.lines[angleId], angleId, canvas.width, canvas.height);
+    if (key) { dragState = { angleId, key }; e.currentTarget.setPointerCapture(e.pointerId); }
+}
+
+function onEditorPointerMove(e, angleId) {
+    if (dragState.angleId !== angleId || !dragState.key) return;
+    const wrap = e.currentTarget;
+    const rect = wrap.getBoundingClientRect();
+    const xp = Math.max(1, Math.min(99, ((e.clientX - rect.left) / rect.width)  * 100));
+    const yp = Math.max(1, Math.min(99, ((e.clientY - rect.top)  / rect.height) * 100));
+    const key = dragState.key;
+    const prev = state.lines[angleId];
+
+    if (key === 'cheekL') state.lines[angleId].cheekL = { ...prev.cheekL, cx: xp, cy: yp };
+    if (key === 'cheekR') state.lines[angleId].cheekR = { ...prev.cheekR, cx: xp, cy: yp };
+    if (key === 'ear') {
+        const dx = xp - (prev.ear.x1 + prev.ear.x2) / 2;
+        const dy = yp - (prev.ear.y1 + prev.ear.y2) / 2;
+        state.lines[angleId].ear = { x1: prev.ear.x1+dx, y1: prev.ear.y1+dy, x2: prev.ear.x2+dx, y2: prev.ear.y2+dy };
+    }
+    if (key === 'cheek') state.lines[angleId].cheek = { ...prev.cheek, cx: xp, cy: yp };
+    if (key === 'neck')  state.lines[angleId].neck  = { ...prev.neck,  cx: xp, cy: yp };
+
+    // Redraw immediately (fast)
+    const wrap2 = document.getElementById(`wrap-${angleId}`);
+    const canvas = wrap2 ? wrap2.querySelector('canvas') : null;
+    if (canvas) paintLines(canvas, state.aiResults[angleId] || state.photos[angleId], state.lines[angleId], angleId);
+
+    triggerAI(angleId);
+}
+
+function onEditorPointerUp() { dragState = { angleId: null, key: null }; }
+
+// ─── Render ────────────────────────────────────────────────────────────────────
+function render() {
+    const root = document.getElementById('root');
+    if (!root) return;
+
+    if (state.step === 1) renderCapture(root);
+    else if (state.step === 2) renderCustomize(root);
+    else if (state.step === 3) renderCheckout(root);
+    else if (state.step === 4) renderProcessing(root);
+    else if (state.step === 5) renderConfirmation(root);
+}
+
+function header(step) {
+    return `
+    <div class="header">
+        <div class="logo">BEARD<span>MASK</span></div>
+        <div class="step-pills">
+            ${[1,2,3].map(n => `<div class="pill ${step===n?'active':step>n?'done':''}"></div>`).join('')}
+        </div>
+    </div>`;
+}
+
+function renderCapture(root) {
+    root.innerHTML = header(1) + `
+    <div class="camera-section">
+        <h2 style="margin-bottom:8px;font-size:1.5rem">Scan Your Face</h2>
+        <p style="color:#555;margin-bottom:16px;font-size:.9rem">
+            Photo ${state.currentAngle+1} of ${ANGLES.length} —
+            <span style="color:var(--gold)">${ANGLES[state.currentAngle].label}</span>
+        </p>
+        <div class="camera-wrap">
+            <video id="camera-video" autoplay playsinline muted></video>
+            <canvas id="camera-overlay"></canvas>
+            <div class="instruction-bar">${ANGLES[state.currentAngle].instruction}</div>
+            <div class="face-status searching" id="face-status">⟳ Looking for face...</div>
+            <div class="capture-btn" id="capture-btn" onclick="capturePhoto()">
+                <div class="capture-inner"></div>
+            </div>
+        </div>
+        <div class="angle-strip">
+            ${ANGLES.map((a,i) => `
+                <div class="angle-thumb ${state.photos[a.id]?'done':''} ${i===state.currentAngle?'current':''}">
+                    ${state.photos[a.id]
+                        ? `<img src="${state.photos[a.id]}" alt="${a.label}">`
+                        : `<span class="angle-num">${i+1}</span>`}
+                    <div class="angle-thumb-lbl">${a.label}</div>
+                </div>
+            `).join('')}
+        </div>
+    </div>`;
+
+    setTimeout(() => startCamera(), 100);
+}
+
+function renderCustomize(root) {
+    root.innerHTML = header(2) + `
+    <h2 style="margin-bottom:6px;font-size:1.5rem">Adjust Your Lines</h2>
+    <p style="color:#555;font-size:.85rem;margin-bottom:6px">
+        Drag the <span style="color:#3b82f6">●blue</span>,
+        <span style="color:#ef4444">●red</span> and
+        <span style="color:#22c55e">●green</span> handles to reposition lines.
+        AI regenerates realistic beard ~2s after you stop.
+    </p>
+    <div class="customize-grid">
+        ${ANGLES.map(a => renderPhotoEditor(a)).join('')}
+    </div>
+    <div class="actions">
+        <button class="btn-ghost" onclick="stopCamera();setState({step:1,currentAngle:0})">← Retake</button>
+        <button class="btn-primary" onclick="setState({step:3})">Continue to Order →</button>
+    </div>`;
+
+    // Attach drag events and draw lines
+    ANGLES.forEach(a => {
+        const wrap = document.getElementById(`wrap-${a.id}`);
+        if (!wrap) return;
+        wrap.addEventListener('pointerdown', e => onEditorPointerDown(e, a.id));
+        wrap.addEventListener('pointermove', e => onEditorPointerMove(e, a.id));
+        wrap.addEventListener('pointerup', onEditorPointerUp);
+        wrap.addEventListener('pointercancel', onEditorPointerUp);
+        // Draw lines after img loads
+        const img = wrap.querySelector('img');
+        if (img) img.onload = () => {
+            const canvas = wrap.querySelector('canvas');
+            paintLines(canvas, state.aiResults[a.id] || state.photos[a.id], state.lines[a.id], a.id);
+        };
+        if (img && img.complete) {
+            const canvas = wrap.querySelector('canvas');
+            paintLines(canvas, state.aiResults[a.id] || state.photos[a.id], state.lines[a.id], a.id);
+        }
+    });
+}
+
+function renderPhotoEditor(angle) {
+    const isGenerating = state.generating[angle.id];
+    const hasAI = !!state.aiResults[angle.id];
+    const badgeClass = isGenerating ? 'processing' : hasAI ? 'done' : 'idle';
+    const badgeText = isGenerating ? '⟳ AI Updating...' : hasAI ? 'AI ✓' : 'Original';
+
+    const legendItems = {
+        front:  `<div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div>Cheek Lines</div>`,
+        left:   `<div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div>Ear</div><div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div>Cheek</div><div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div>Neck</div>`,
+        right:  `<div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div>Ear</div><div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div>Cheek</div><div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div>Neck</div>`,
+        chinUp: `<div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div>Neck Line</div>`
+    };
+
+    const photo = state.aiResults[angle.id] || state.photos[angle.id];
+
+    return `
+    <div class="photo-editor">
+        <div class="editor-header">
+            <span class="editor-label">${angle.label}</span>
+            <span class="ai-badge ${badgeClass}">${badgeText}</span>
+        </div>
+        <div class="canvas-wrap" id="wrap-${angle.id}" style="cursor:crosshair">
+            <img src="${photo}" alt="${angle.label}" draggable="false">
+            <canvas></canvas>
+            <div class="drag-hint">Drag coloured handles to adjust</div>
+        </div>
+        <div class="legend">${legendItems[angle.id] || ''}</div>
+    </div>`;
+}
+
+function renderCheckout(root) {
+    root.innerHTML = header(3) + `
+    <h2 style="margin-bottom:24px;font-size:1.5rem">Complete Your Order</h2>
+    <div class="checkout-box">
+        <label class="input-label">Full Name</label>
+        <input class="input-field" type="text" placeholder="John Smith" id="inp-name" value="${state.customerInfo.name}" oninput="state.customerInfo.name=this.value">
+        <label class="input-label">Email</label>
+        <input class="input-field" type="email" placeholder="john@example.com" id="inp-email" value="${state.customerInfo.email}" oninput="state.customerInfo.email=this.value">
+        <label class="input-label">Phone</label>
+        <input class="input-field" type="tel" placeholder="+1 555 123 4567" id="inp-phone" value="${state.customerInfo.phone}" oninput="state.customerInfo.phone=this.value">
+        <div class="price-tag">$29<span>.99</span></div>
+        <div class="actions">
+            <button class="btn-ghost" onclick="setState({step:2})">← Back</button>
+            <button class="btn-primary" onclick="submitOrder()">Place Order →</button>
+        </div>
+    </div>`;
+}
+
+async function submitOrder() {
+    setState({ step: 4, processing: 0 });
+    for (let i = 0; i <= 100; i += 10) {
+        await new Promise(r => setTimeout(r, 280));
+        state.processing = Math.min(i, 100);
+        const bar = document.getElementById('progress-bar');
+        if (bar) bar.style.width = state.processing + '%';
+    }
+    const id = 'BM-' + Math.random().toString(36).substr(2, 8).toUpperCase();
+    setState({ step: 5, orderId: id });
+}
+
+function renderProcessing(root) {
+    root.innerHTML = header(2) + `
+    <div class="processing-wrap">
+        <div class="spinner"></div>
+        <h2 style="font-size:1.4rem;margin-bottom:12px">Processing Your Order</h2>
+        <p style="color:#555;font-size:.9rem">Uploading your scans and preparing specs...</p>
+        <div class="progress-track"><div class="progress-fill" id="progress-bar" style="width:0%"></div></div>
+    </div>`;
+    // Animate
+    let p = 0;
+    const interval = setInterval(() => {
+        p += 8; if (p > 100) { clearInterval(interval); return; }
+        const bar = document.getElementById('progress-bar');
+        if (bar) bar.style.width = p + '%';
+        if (p >= 100) {
+            clearInterval(interval);
+            const id = 'BM-' + Math.random().toString(36).substr(2, 8).toUpperCase();
+            setState({ step: 5, orderId: id });
+        }
+    }, 280);
+}
+
+function renderConfirmation(root) {
+    root.innerHTML = header(3) + `
+    <div class="confirm-wrap">
+        <div class="confirm-icon">✓</div>
+        <h2 style="font-size:1.7rem;margin-bottom:10px">Order Confirmed</h2>
+        <p style="color:#555">Your custom beard mask is in production.</p>
+        <div class="order-card">
+            ${[['Order ID', state.orderId], ['Name', state.customerInfo.name || '—'], ['Email', state.customerInfo.email || '—'], ['Total', '$29.99']].map(([k,v]) =>
+                `<div class="order-row"><span class="order-row-label">${k}</span><span class="order-row-val">${v}</span></div>`
+            ).join('')}
+        </div>
+        <div class="next-steps">
+            <h4>What Happens Next</h4>
+            ${['Preview email within 2 hours','Approve or request changes','Custom mask 3D printed','Shipped in 2–3 business days'].map((s,i) =>
+                `<div class="next-step-item"><div class="step-num">${i+1}</div><span>${s}</span></div>`
+            ).join('')}
+        </div>
+    </div>`;
+}
+
+// Boot
+render();
+</script>
+</body>
+</html>
