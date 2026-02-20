@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Beard Mask — Custom Fit</title>
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --black: #0a0a0a;
+            --white: #f5f5f0;
+            --gold: #c9a84c;
+            --dark: #141414;
+            --mid: #1e1e1e;
+            --red: #ef4444;
+            --blue: #3b82f6;
+            --green: #22c55e;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'DM Sans', sans-serif; background: var(--black); color: var(--white); min-height: 100vh; }
+        h1,h2,h3 { font-family: 'Syne', sans-serif; }
+        
+        .app { max-width: 900px; margin: 0 auto; padding: 20px; }
+        .header { text-align: center; padding: 20px 0; border-bottom: 1px solid rgba(201,168,76,0.25); margin-bottom: 30px; }
+        .logo { font-size: 1.8rem; font-weight: 800; color: var(--gold); }
+        
+        .progress { display: flex; gap: 8px; margin-bottom: 30px; }
+        .step-bar { flex: 1; height: 6px; background: var(--mid); border-radius: 3px; }
+        .step-bar.active { background: var(--gold); }
+        .step-bar.done { background: var(--gold); opacity: 0.5; }
+        
+        .view { margin-bottom: 40px; }
+        .view-title { font-size: 1.5rem; margin-bottom: 8px; color: var(--gold); }
+        .view-hint { font-size: 0.9rem; color: #666; margin-bottom: 20px; }
+        
+        .photo-upload { background: var(--dark); border: 2px dashed rgba(201,168,76,0.3); border-radius: 16px; padding: 60px 20px; text-align: center; cursor: pointer; transition: all 0.3s; }
+        .photo-upload:hover { border-color: var(--gold); background: var(--mid); }
+        .upload-icon { font-size: 3rem; margin-bottom: 16px; }
+        .upload-text { font-size: 1.1rem; font-weight: 600; margin-bottom: 8px; }
+        .upload-hint { font-size: 0.85rem; color: #666; }
+        
+        .canvas-section { background: var(--dark); border-radius: 16px; padding: 20px; margin: 20px 0; }
+        .canvas-wrap { position: relative; background: #000; border-radius: 12px; overflow: hidden; cursor: crosshair; max-width: 100%; }
+        .canvas-wrap img { width: 100%; display: block; user-select: none; }
+        .canvas-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+        
+        .tools { background: rgba(201,168,76,0.1); border-radius: 12px; padding: 16px; margin: 16px 0; }
+        .tool-label { font-size: 0.75rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold); margin-bottom: 12px; }
+        .color-btns { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+        .color-btn { padding: 12px; border-radius: 8px; border: 2px solid transparent; cursor: pointer; font-weight: 600; transition: all 0.2s; }
+        .color-btn.red { background: var(--red); color: white; }
+        .color-btn.blue { background: var(--blue); color: white; }
+        .color-btn.green { background: var(--green); color: white; }
+        .color-btn.active { border-color: white; box-shadow: 0 0 0 2px white; }
+        
+        .instructions { background: var(--mid); border-radius: 8px; padding: 14px; font-size: 0.85rem; line-height: 1.6; color: #999; margin: 16px 0; }
+        .instructions strong { color: var(--gold); }
+        
+        .actions { display: flex; gap: 12px; margin-top: 20px; }
+        .btn { flex: 1; padding: 16px; border-radius: 12px; font-family: 'Syne', sans-serif; font-size: 1rem; font-weight: 700; cursor: pointer; border: none; transition: all 0.2s; }
+        .btn-primary { background: var(--gold); color: var(--black); }
+        .btn-ghost { background: transparent; color: var(--white); border: 1px solid rgba(201,168,76,0.25); }
+        
+        .result-box { background: var(--dark); border-radius: 16px; padding: 30px; margin: 20px 0; }
+        .result-data { background: var(--mid); border-radius: 8px; padding: 16px; font-family: monospace; font-size: 0.8rem; color: #999; max-height: 400px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
+        
+        .hidden { display: none !important; }
+        
+        @media(max-width: 600px) {
+            .color-btns { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+<div class="app">
+    <div class="header">
+        <div class="logo">BEARDMASK</div>
+        <div style="font-size: 0.9rem; color: #666; margin-top: 8px;">Custom Beard Line Measurements</div>
+    </div>
+    
+    <div class="progress">
+        <div class="step-bar active" id="bar-0"></div>
+        <div class="step-bar" id="bar-1"></div>
+        <div class="step-bar" id="bar-2"></div>
+        <div class="step-bar" id="bar-3"></div>
+    </div>
+    
+    <!-- View 0: Left Profile -->
+    <div class="view" id="view-0">
+        <div class="view-title">📸 Step 1: Left Profile</div>
+        <div class="view-hint">Turn 90° right. Hold a credit card vertically next to your face. Take photo.</div>
+        
+        <div class="photo-upload" onclick="document.getElementById('file-0').click()">
+            <div class="upload-icon">📷</div>
+            <div class="upload-text">Upload or Take Photo</div>
+            <div class="upload-hint">Credit card must be visible</div>
+        </div>
+        <input type="file" id="file-0" accept="image/*" capture="environment" style="display:none" onchange="loadPhoto(0, event)">
+        
+        <div class="canvas-section hidden" id="editor-0">
+            <div class="tools">
+                <div class="tool-label">Select Line Color</div>
+                <div class="color-btns">
+                    <div class="color-btn red active" onclick="setColor('red')">🔴 Ear</div>
+                    <div class="color-btn blue" onclick="setColor('blue')">🔵 Cheek</div>
+                    <div class="color-btn green" onclick="setColor('green')">🟢 Neck</div>
+                </div>
+            </div>
+            
+            <div class="canvas-wrap" id="wrap-0">
+                <img id="photo-0" src="">
+                <canvas id="canvas-0"></canvas>
+            </div>
+            
+            <div class="instructions">
+                <strong>How to draw:</strong><br>
+                • Tap to place points along your beard edge<br>
+                • Points auto-connect into a line<br>
+                • Draw ear line (red), cheek line (blue), neck line (green)
+            </div>
+            
+            <div class="actions">
+                <button class="btn btn-ghost" onclick="clearLines(0)">Clear All</button>
+                <button class="btn btn-primary" onclick="nextView(1)">Next →</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- View 1: Right Profile -->
+    <div class="view hidden" id="view-1">
+        <div class="view-title">📸 Step 2: Right Profile</div>
+        <div class="view-hint">Turn 90° left. Hold credit card next to face. Take photo.</div>
+        
+        <div class="photo-upload" onclick="document.getElementById('file-1').click()">
+            <div class="upload-icon">📷</div>
+            <div class="upload-text">Upload or Take Photo</div>
+            <div class="upload-hint">Credit card must be visible</div>
+        </div>
+        <input type="file" id="file-1" accept="image/*" capture="environment" style="display:none" onchange="loadPhoto(1, event)">
+        
+        <div class="canvas-section hidden" id="editor-1">
+            <div class="tools">
+                <div class="tool-label">Select Line Color</div>
+                <div class="color-btns">
+                    <div class="color-btn red active" onclick="setColor('red')">🔴 Ear</div>
+                    <div class="color-btn blue" onclick="setColor('blue')">🔵 Cheek</div>
+                    <div class="color-btn green" onclick="setColor('green')">🟢 Neck</div>
+                </div>
+            </div>
+            
+            <div class="canvas-wrap" id="wrap-1">
+                <img id="photo-1" src="">
+                <canvas id="canvas-1"></canvas>
+            </div>
+            
+            <div class="instructions">
+                <strong>Tip:</strong> Try to match the line positions from your left profile.
+            </div>
+            
+            <div class="actions">
+                <button class="btn btn-ghost" onclick="prevView(0)">← Back</button>
+                <button class="btn btn-ghost" onclick="clearLines(1)">Clear</button>
+                <button class="btn btn-primary" onclick="nextView(2)">Next →</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- View 2: Front -->
+    <div class="view hidden" id="view-2">
+        <div class="view-title">📸 Step 3: Front View</div>
+        <div class="view-hint">Face forward. Hold credit card in frame. Take photo.</div>
+        
+        <div class="photo-upload" onclick="document.getElementById('file-2').click()">
+            <div class="upload-icon">📷</div>
+            <div class="upload-text">Upload or Take Photo</div>
+            <div class="upload-hint">Credit card must be visible</div>
+        </div>
+        <input type="file" id="file-2" accept="image/*" capture="environment" style="display:none" onchange="loadPhoto(2, event)">
+        
+        <div class="canvas-section hidden" id="editor-2">
+            <div class="tools">
+                <div class="tool-label">Draw Cheek Lines (Blue)</div>
+                <div class="instructions" style="margin: 0;">
+                    Draw left and right cheek lines from sideburns down to beard edge.
+                </div>
+            </div>
+            
+            <div class="canvas-wrap" id="wrap-2">
+                <img id="photo-2" src="">
+                <canvas id="canvas-2"></canvas>
+            </div>
+            
+            <div class="actions">
+                <button class="btn btn-ghost" onclick="prevView(1)">← Back</button>
+                <button class="btn btn-ghost" onclick="clearLines(2)">Clear</button>
+                <button class="btn btn-primary" onclick="nextView(3)">Next →</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- View 3: Chin Up -->
+    <div class="view hidden" id="view-3">
+        <div class="view-title">📸 Step 4: Chin Up</div>
+        <div class="view-hint">Tilt head back. Show full neck. Hold credit card in frame.</div>
+        
+        <div class="photo-upload" onclick="document.getElementById('file-3').click()">
+            <div class="upload-icon">📷</div>
+            <div class="upload-text">Upload or Take Photo</div>
+            <div class="upload-hint">Credit card must be visible</div>
+        </div>
+        <input type="file" id="file-3" accept="image/*" capture="environment" style="display:none" onchange="loadPhoto(3, event)">
+        
+        <div class="canvas-section hidden" id="editor-3">
+            <div class="tools">
+                <div class="tool-label">Draw Neck Line (Green)</div>
+                <div class="instructions" style="margin: 0;">
+                    Draw the horizontal neck line where your beard ends.
+                </div>
+            </div>
+            
+            <div class="canvas-wrap" id="wrap-3">
+                <img id="photo-3" src="">
+                <canvas id="canvas-3"></canvas>
+            </div>
+            
+            <div class="actions">
+                <button class="btn btn-ghost" onclick="prevView(2)">← Back</button>
+                <button class="btn btn-ghost" onclick="clearLines(3)">Clear</button>
+                <button class="btn btn-primary" onclick="exportData()">Export Data →</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Results -->
+    <div class="view hidden" id="view-results">
+        <div class="view-title">✅ Complete!</div>
+        <div class="view-hint">Your measurements are ready. Copy this data and send to manufacturing.</div>
+        
+        <div class="result-box">
+            <div class="result-data" id="result-data"></div>
+        </div>
+        
+        <div class="actions">
+            <button class="btn btn-ghost" onclick="location.reload()">Start Over</button>
+            <button class="btn btn-primary" onclick="copyData()">Copy Data</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// ─── State ─────────────────────────────────────────────────────────────────────
+let currentView = 0;
+let currentColor = 'red';
+let photos = [null, null, null, null];
+let lines = [
+    { red: [], blue: [], green: [] },
+    { red: [], blue: [], green: [] },
+    { blue: [] },  // Front only has cheek lines
+    { green: [] }  // Chin up only has neck line
+];
+
+const COLORS = { red: '#ef4444', blue: '#3b82f6', green: '#22c55e' };
+const CARD_WIDTH_MM = 85.6;
+
+// ─── Photo Loading ─────────────────────────────────────────────────────────────
+function loadPhoto(idx, event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        photos[idx] = e.target.result;
+        const img = document.getElementById(`photo-${idx}`);
+        img.src = photos[idx];
+        img.onload = () => {
+            initCanvas(idx);
+            document.getElementById(`editor-${idx}`).classList.remove('hidden');
+        };
+    };
+    reader.readAsDataURL(file);
+}
+
+function initCanvas(idx) {
+    const canvas = document.getElementById(`canvas-${idx}`);
+    const img = document.getElementById(`photo-${idx}`);
+    const wrap = document.getElementById(`wrap-${idx}`);
+    
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    
+    wrap.onclick = (e) => addPoint(idx, e);
+    render(idx);
+}
+
+// ─── Drawing ───────────────────────────────────────────────────────────────────
+function addPoint(idx, e) {
+    const canvas = document.getElementById(`canvas-${idx}`);
+    const rect = canvas.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * canvas.width;
+    const y = ((e.clientY - rect.top) / rect.height) * canvas.height;
+    
+    const point = { x, y, color: currentColor };
+    
+    // Front view only allows blue (cheeks)
+    if (idx === 2) {
+        lines[2].blue.push(point);
+    }
+    // Chin up only allows green (neck)
+    else if (idx === 3) {
+        lines[3].green.push(point);
+    }
+    // Profile views allow all colors
+    else {
+        lines[idx][currentColor].push(point);
+    }
+    
+    render(idx);
+}
+
+function render(idx) {
+    const canvas = document.getElementById(`canvas-${idx}`);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    
+    ctx.clearRect(0, 0, W, H);
+    
+    const viewLines = lines[idx];
+    
+    // Draw lines
+    Object.keys(viewLines).forEach(color => {
+        const points = viewLines[color];
+        if (points.length < 2) return;
+        
+        const sorted = [...points].sort((a, b) => a.x - b.x);
+        
+        ctx.save();
+        ctx.strokeStyle = COLORS[color];
+        ctx.lineWidth = 3;
+        ctx.setLineDash([8, 4]);
+        ctx.shadowColor = COLORS[color];
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.moveTo(sorted[0].x, sorted[0].y);
+        
+        for (let i = 1; i < sorted.length; i++) {
+            const prev = sorted[i - 1];
+            const curr = sorted[i];
+            const cpx = (prev.x + curr.x) / 2;
+            const cpy = (prev.y + curr.y) / 2;
+            ctx.quadraticCurveTo(prev.x, prev.y, cpx, cpy);
+        }
+        
+        const last = sorted[sorted.length - 1];
+        ctx.lineTo(last.x, last.y);
+        ctx.stroke();
+        ctx.restore();
+    });
+    
+    // Draw points
+    Object.keys(viewLines).forEach(color => {
+        viewLines[color].forEach(p => {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
+            ctx.fillStyle = COLORS[p.color];
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.shadowColor = COLORS[p.color];
+            ctx.shadowBlur = 10;
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+        });
+    });
+}
+
+function clearLines(idx) {
+    const viewLines = lines[idx];
+    Object.keys(viewLines).forEach(key => {
+        viewLines[key] = [];
+    });
+    render(idx);
+}
+
+function setColor(color) {
+    currentColor = color;
+    document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll(`.color-btn.${color}`).forEach(b => b.classList.add('active'));
+}
+
+// ─── Navigation ────────────────────────────────────────────────────────────────
+function nextView(idx) {
+    document.getElementById(`view-${currentView}`).classList.add('hidden');
+    document.getElementById(`bar-${currentView}`).classList.remove('active');
+    document.getElementById(`bar-${currentView}`).classList.add('done');
+    
+    currentView = idx;
+    document.getElementById(`view-${idx}`).classList.remove('hidden');
+    if (idx < 4) document.getElementById(`bar-${idx}`).classList.add('active');
+}
+
+function prevView(idx) {
+    document.getElementById(`view-${currentView}`).classList.add('hidden');
+    document.getElementById(`bar-${currentView}`).classList.remove('active');
+    
+    currentView = idx;
+    document.getElementById(`view-${idx}`).classList.remove('hidden');
+    document.getElementById(`bar-${idx}`).classList.remove('done');
+    document.getElementById(`bar-${idx}`).classList.add('active');
+}
+
+// ─── Export ────────────────────────────────────────────────────────────────────
+function exportData() {
+    const data = {
+        photos: photos.map((p, i) => `Photo ${i+1}: ${p ? 'Captured' : 'Missing'}`),
+        lines: lines.map((viewLines, idx) => {
+            const result = {};
+            Object.keys(viewLines).forEach(color => {
+                result[color] = viewLines[color].map(p => ({
+                    x_px: p.x.toFixed(2),
+                    y_px: p.y.toFixed(2)
+                }));
+            });
+            return result;
+        }),
+        note: 'Credit card detection and mm conversion coming in next update'
+    };
+    
+    document.getElementById('result-data').textContent = JSON.stringify(data, null, 2);
+    nextView(4);
+    document.getElementById('view-results').classList.remove('hidden');
+}
+
+function copyData() {
+    const text = document.getElementById('result-data').textContent;
+    navigator.clipboard.writeText(text).then(() => {
+        alert('Data copied to clipboard!');
+    });
+}
+</script>
+</body>
+</html>
