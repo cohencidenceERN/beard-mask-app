@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Beard Mask — Smart Line Editor</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --black: #0a0a0a;
+            --white: #f5f5f0;
+            --gold: #c9a84c;
+            --gold-light: #e8cc7a;
+            --dark: #141414;
+            --mid: #1e1e1e;
+            --red: #ef4444;
+            --blue: #3b82f6;
+            --green: #22c55e;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'DM Sans', sans-serif; background: var(--black); color: var(--white); min-height: 100vh; }
+        h1,h2,h3,h4 { font-family: 'Syne', sans-serif; }
+        
+        .app { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .header { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 1px solid rgba(201,168,76,0.25); margin-bottom: 20px; }
+        .logo { font-family: 'Syne', sans-serif; font-size: 1.4rem; font-weight: 800; color: var(--gold); }
+        .logo span { color: var(--white); }
+        
+        .progress { display: flex; gap: 8px; margin-bottom: 30px; }
+        .step { flex: 1; height: 6px; background: var(--mid); border-radius: 3px; }
+        .step.active { background: var(--gold); }
+        .step.done { background: var(--gold-light); opacity: 0.5; }
+        
+        .view-wrap { margin-bottom: 40px; }
+        .view-title { font-size: 1.4rem; margin-bottom: 8px; color: var(--gold); }
+        .view-hint { font-size: 0.85rem; color: #666; margin-bottom: 20px; }
+        
+        .camera-section { background: var(--dark); border-radius: 16px; padding: 20px; border: 1px solid rgba(201,168,76,0.25); margin-bottom: 20px; }
+        .camera-wrap { position: relative; background: #000; border-radius: 12px; overflow: hidden; max-width: 600px; margin: 0 auto; }
+        video { width: 100%; display: block; transform: scaleX(-1); }
+        canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+        
+        .face-status { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); font-size: 0.75rem; font-family: 'Syne', sans-serif; padding: 6px 14px; border-radius: 20px; z-index: 10; background: rgba(239,68,68,0.2); color: var(--red); border: 1px solid var(--red); }
+        .face-status.found { background: rgba(34,197,94,0.2); color: var(--green); border: 1px solid var(--green); }
+        
+        .capture-btn { display: block; margin: 20px auto 0; width: 68px; height: 68px; border-radius: 50%; border: 3px solid var(--gold); background: transparent; cursor: pointer; position: relative; }
+        .capture-inner { width: 52px; height: 52px; border-radius: 50%; background: var(--gold); position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+        
+        .editor-layout { display: grid; grid-template-columns: 1fr 300px; gap: 20px; }
+        .canvas-section { background: var(--dark); border-radius: 16px; padding: 20px; border: 1px solid rgba(201,168,76,0.25); }
+        .canvas-wrap-editor { position: relative; background: #000; border-radius: 12px; overflow: hidden; cursor: crosshair; }
+        .canvas-wrap-editor img { width: 100%; display: block; user-select: none; }
+        .canvas-wrap-editor canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+        
+        .controls { background: var(--dark); border-radius: 16px; padding: 20px; border: 1px solid rgba(201,168,76,0.25); }
+        .control-section { margin-bottom: 20px; }
+        .control-label { font-size: 0.75rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold); margin-bottom: 10px; }
+        
+        .adjust-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .adjust-btn { background: var(--mid); border: 1px solid #333; padding: 10px; border-radius: 8px; font-family: 'Syne', sans-serif; font-size: 0.85rem; font-weight: 600; color: var(--white); cursor: pointer; transition: all 0.2s; }
+        .adjust-btn:hover { border-color: var(--gold); }
+        .adjust-btn:active { background: var(--gold); color: var(--black); }
+        
+        .line-status { background: rgba(201,168,76,0.1); border-radius: 8px; padding: 12px; font-size: 0.8rem; color: #999; line-height: 1.6; }
+        .line-status strong { color: var(--gold); }
+        
+        .actions { display: flex; gap: 12px; margin-top: 20px; }
+        .btn-primary { flex: 1; background: var(--gold); color: var(--black); border: none; padding: 16px; border-radius: 12px; font-family: 'Syne', sans-serif; font-size: 1rem; font-weight: 700; cursor: pointer; }
+        .btn-ghost { background: transparent; color: var(--white); border: 1px solid rgba(201,168,76,0.25); padding: 16px 24px; border-radius: 12px; font-family: 'Syne', sans-serif; font-size: 0.9rem; font-weight: 600; cursor: pointer; }
+        
+        .hidden { display: none; }
+        
+        @media(max-width: 900px) {
+            .editor-layout { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+<div class="app">
+    <div class="header">
+        <div class="logo">BEARD<span>MASK</span></div>
+    </div>
+    
+    <div class="progress">
+        <div class="step active"></div>
+        <div class="step"></div>
+        <div class="step"></div>
+        <div class="step"></div>
+    </div>
+    
+    <!-- Capture Screens -->
+    <div class="view-wrap" id="capture-0">
+        <div class="view-title">📸 Step 1: Left Profile</div>
+        <div class="view-hint">Turn 90° right. Hold credit card next to face. Face the camera.</div>
+        <div class="camera-section">
+            <div class="camera-wrap">
+                <video id="video-0" autoplay playsinline muted></video>
+                <canvas id="overlay-0"></canvas>
+                <div class="face-status" id="status-0">Looking for face...</div>
+            </div>
+            <button class="capture-btn" onclick="capturePhoto(0)">
+                <div class="capture-inner"></div>
+            </button>
+        </div>
+    </div>
+    
+    <!-- Editor Screens -->
+    <div class="view-wrap hidden" id="editor-0">
+        <div class="view-title">✏️ Adjust Lines: Left Profile</div>
+        <div class="view-hint">Lines placed automatically. Use buttons to adjust or drag handles.</div>
+        
+        <div class="editor-layout">
+            <div class="canvas-section">
+                <div class="canvas-wrap-editor" id="wrap-0">
+                    <img id="photo-0" src="">
+                    <canvas id="canvas-0"></canvas>
+                </div>
+            </div>
+            
+            <div class="controls">
+                <div class="control-section">
+                    <div class="control-label">Quick Adjustments</div>
+                    <div class="adjust-btns">
+                        <button class="adjust-btn" onclick="adjustAll(0, 0, -5)">⬆️ All Up</button>
+                        <button class="adjust-btn" onclick="adjustAll(0, 0, 5)">⬇️ All Down</button>
+                        <button class="adjust-btn" onclick="adjustLine(0, 'ear', 0, -3)">🔴 Ear Up</button>
+                        <button class="adjust-btn" onclick="adjustLine(0, 'ear', 0, 3)">🔴 Ear Down</button>
+                        <button class="adjust-btn" onclick="adjustLine(0, 'cheek', 0, -3)">🔵 Cheek Up</button>
+                        <button class="adjust-btn" onclick="adjustLine(0, 'cheek', 0, 3)">🔵 Cheek Down</button>
+                        <button class="adjust-btn" onclick="adjustLine(0, 'neck', 0, -3)">🟢 Neck Up</button>
+                        <button class="adjust-btn" onclick="adjustLine(0, 'neck', 0, 3)">🟢 Neck Down</button>
+                    </div>
+                </div>
+                
+                <div class="line-status">
+                    <strong>Auto-placed using face detection.</strong><br>
+                    Lines follow your facial landmarks. Adjust as needed.
+                </div>
+            </div>
+        </div>
+        
+        <div class="actions">
+            <button class="btn-ghost" onclick="retake(0)">← Retake Photo</button>
+            <button class="btn-primary" onclick="nextStep()">Next: Right Profile →</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// ─── State ─────────────────────────────────────────────────────────────────────
+const ANGLES = ['left', 'right', 'front', 'chinUp'];
+let currentStep = 0;
+let photos = [null, null, null, null];
+let landmarks = [null, null, null, null];
+let cameraStream = null;
+let faceMesh = null;
+
+// Line data: stores points as percentages + offsets
+let lines = [
+    { ear: [], cheek: [], neck: [], offsets: {ear: {x:0,y:0}, cheek: {x:0,y:0}, neck: {x:0,y:0}} },
+    { ear: [], cheek: [], neck: [], offsets: {ear: {x:0,y:0}, cheek: {x:0,y:0}, neck: {x:0,y:0}} },
+    { cheekL: [], cheekR: [], offsets: {cheekL: {x:0,y:0}, cheekR: {x:0,y:0}} },
+    { neck: [], offsets: {neck: {x:0,y:0}} }
+];
+
+// ─── Camera ────────────────────────────────────────────────────────────────────
+async function startCamera(viewIdx) {
+    try {
+        cameraStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 960 } }
+        });
+        const video = document.getElementById(`video-${viewIdx}`);
+        video.srcObject = cameraStream;
+        await video.play();
+        
+        // Setup MediaPipe
+        faceMesh = new FaceMesh({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}` });
+        faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+        
+        faceMesh.onResults(results => {
+            const found = results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0;
+            const status = document.getElementById(`status-${viewIdx}`);
+            if (status) {
+                status.textContent = found ? '✓ Face detected' : 'Looking for face...';
+                status.className = 'face-status ' + (found ? 'found' : '');
+            }
+            
+            if (found) {
+                landmarks[viewIdx] = results.multiFaceLandmarks[0];
+                drawFaceGuide(viewIdx, results.multiFaceLandmarks[0]);
+            }
+        });
+        
+        const detect = async () => {
+            if (!cameraStream || !video.videoWidth) { requestAnimationFrame(detect); return; }
+            await faceMesh.send({ image: video });
+            requestAnimationFrame(detect);
+        };
+        detect();
+        
+    } catch (err) {
+        alert('Camera access denied');
+    }
+}
+
+function drawFaceGuide(viewIdx, lms) {
+    const canvas = document.getElementById(`overlay-${viewIdx}`);
+    const video = document.getElementById(`video-${viewIdx}`);
+    if (!canvas || !video) return;
+    
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    
+    // Draw face outline
+    const outline = [10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109];
+    ctx.save();
+    ctx.beginPath();
+    outline.forEach((idx, i) => {
+        const lm = lms[idx];
+        const x = (1 - lm.x) * W;
+        const y = lm.y * H;
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.closePath();
+    ctx.strokeStyle = '#c9a84c';
+    ctx.lineWidth = 2;
+    ctx.shadowColor = '#c9a84c';
+    ctx.shadowBlur = 8;
+    ctx.stroke();
+    ctx.restore();
+}
+
+function capturePhoto(viewIdx) {
+    if (!landmarks[viewIdx]) {
+        alert('Please wait for face detection');
+        return;
+    }
+    
+    const video = document.getElementById(`video-${viewIdx}`);
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(video, 0, 0);
+    
+    photos[viewIdx] = canvas.toDataURL('image/jpeg', 0.9);
+    
+    if (cameraStream) {
+        cameraStream.getTracks().forEach(t => t.stop());
+        cameraStream = null;
+    }
+    
+    // Calculate lines from landmarks
+    calculateLines(viewIdx);
+    
+    // Show editor
+    document.getElementById(`capture-${viewIdx}`).classList.add('hidden');
+    document.getElementById(`editor-${viewIdx}`).classList.remove('hidden');
+    
+    const img = document.getElementById(`photo-${viewIdx}`);
+    img.src = photos[viewIdx];
+    img.onload = () => renderLines(viewIdx);
+}
+
+// ─── Line Calculation from Landmarks ───────────────────────────────────────────
+function calculateLines(viewIdx) {
+    const lms = landmarks[viewIdx];
+    if (!lms) return;
+    
+    const toPercent = (v) => v * 100;
+    const mirrorX = (v) => 100 - (v * 100);
+    
+    if (viewIdx === 0) {
+        // LEFT PROFILE
+        // Ear line: starts at jaw near ear (landmark #93)
+        const earTop = lms[93];
+        lines[0].ear = [
+            { x: mirrorX(earTop.x), y: toPercent(earTop.y), color: 'red' },
+            { x: mirrorX(earTop.x) - 6, y: toPercent(earTop.y) + 21, color: 'red' }
+        ];
+        
+        // Cheek line: sideburn area to mustache corner
+        const sideburn = lms[127];
+        const mustacheCorner = lms[206];
+        const cheekMid = lms[187];
+        lines[0].cheek = [
+            { x: mirrorX(sideburn.x), y: toPercent(sideburn.y), color: 'blue' },
+            { x: mirrorX(cheekMid.x), y: toPercent(cheekMid.y), color: 'blue' },
+            { x: mirrorX(mustacheCorner.x), y: toPercent(mustacheCorner.y), color: 'blue' }
+        ];
+        
+        // Neck line: below vermillion
+        const vermillion = lms[18];
+        const faceTop = lms[10];
+        const chin = lms[152];
+        const faceHeight = Math.abs(chin.y - faceTop.y);
+        const neckY = toPercent(vermillion.y + faceHeight * 0.65);
+        
+        lines[0].neck = [
+            { x: 5, y: neckY, color: 'green' },
+            { x: 50, y: neckY - 4, color: 'green' },
+            { x: 95, y: neckY, color: 'green' }
+        ];
+    }
+}
+
+function renderLines(viewIdx) {
+    const canvas = document.getElementById(`canvas-${viewIdx}`);
+    const img = document.getElementById(`photo-${viewIdx}`);
+    if (!canvas || !img || !img.complete) return;
+    
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    
+    const viewLines = lines[viewIdx];
+    const COLORS = { red: '#ef4444', blue: '#3b82f6', green: '#22c55e' };
+    
+    // Draw each line type
+    Object.keys(viewLines).forEach(key => {
+        if (key === 'offsets') return;
+        const points = viewLines[key];
+        if (points.length < 2) return;
+        
+        const color = COLORS[points[0].color];
+        
+        // Draw line
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.setLineDash([8, 4]);
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.moveTo(points[0].x * W / 100, points[0].y * H / 100);
+        
+        for (let i = 1; i < points.length; i++) {
+            const prev = points[i - 1];
+            const curr = points[i];
+            const cpx = ((prev.x + curr.x) / 2) * W / 100;
+            const cpy = ((prev.y + curr.y) / 2) * H / 100;
+            ctx.quadraticCurveTo(prev.x * W / 100, prev.y * H / 100, cpx, cpy);
+        }
+        
+        const last = points[points.length - 1];
+        ctx.lineTo(last.x * W / 100, last.y * H / 100);
+        ctx.stroke();
+        ctx.restore();
+        
+        // Draw handles
+        points.forEach(p => {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(p.x * W / 100, p.y * H / 100, 8, 0, Math.PI * 2);
+            ctx.fillStyle = color;
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.shadowColor = color;
+            ctx.shadowBlur = 10;
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+        });
+    });
+}
+
+// ─── Adjustments ───────────────────────────────────────────────────────────────
+function adjustAll(viewIdx, dx, dy) {
+    const viewLines = lines[viewIdx];
+    Object.keys(viewLines).forEach(key => {
+        if (key === 'offsets') return;
+        viewLines[key].forEach(p => {
+            p.x += dx;
+            p.y += dy;
+        });
+    });
+    renderLines(viewIdx);
+}
+
+function adjustLine(viewIdx, lineType, dx, dy) {
+    const viewLines = lines[viewIdx];
+    if (viewLines[lineType]) {
+        viewLines[lineType].forEach(p => {
+            p.x += dx;
+            p.y += dy;
+        });
+    }
+    renderLines(viewIdx);
+}
+
+function retake(viewIdx) {
+    photos[viewIdx] = null;
+    landmarks[viewIdx] = null;
+    document.getElementById(`editor-${viewIdx}`).classList.add('hidden');
+    document.getElementById(`capture-${viewIdx}`).classList.remove('hidden');
+    startCamera(viewIdx);
+}
+
+function nextStep() {
+    // TODO: Move to next view
+    alert('Next view coming - need to build views 1-3');
+}
+
+// ─── Init ──────────────────────────────────────────────────────────────────────
+startCamera(0);
+</script>
+</body>
+</html>
